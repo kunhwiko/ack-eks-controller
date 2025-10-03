@@ -666,33 +666,53 @@ func (rm *resourceManager) updateComputeConfig(
 	exit := rlog.Trace("rm.updateComputeConfig")
 	defer exit(err)
 
-	// Convert []*string to []string for NodePools
-	nodePools := make([]string, 0, len(r.ko.Spec.ComputeConfig.NodePools))
-	for _, nodePool := range r.ko.Spec.ComputeConfig.NodePools {
-		if nodePool != nil {
-			nodePools = append(nodePools, *nodePool)
-		}
-	}
-
 	input := &svcsdk.UpdateClusterConfigInput{
 		Name: r.ko.Spec.Name,
-		ComputeConfig: &svcsdktypes.ComputeConfigRequest{
+	}
+
+	// Process compute configs
+	if r.ko.Spec.ComputeConfig != nil {
+		// Convert []*string to []string for NodePools
+		nodePools := make([]string, 0, len(r.ko.Spec.ComputeConfig.NodePools))
+		for _, nodePool := range r.ko.Spec.ComputeConfig.NodePools {
+			if nodePool != nil {
+				nodePools = append(nodePools, *nodePool)
+			}
+		}
+
+		input.ComputeConfig = &svcsdktypes.ComputeConfigRequest{
 			Enabled:     r.ko.Spec.ComputeConfig.Enabled,
 			NodePools:   nodePools, // Use the converted []string slice
 			NodeRoleArn: r.ko.Spec.ComputeConfig.NodeRoleARN,
-		},
-		StorageConfig: &svcsdktypes.StorageConfigRequest{
+		}
+	}
+
+	// Process storage configs
+	if r.ko.Spec.StorageConfig != nil {
+		input.StorageConfig = &svcsdktypes.StorageConfigRequest{
 			BlockStorage: &svcsdktypes.BlockStorage{
 				Enabled: r.ko.Spec.StorageConfig.BlockStorage.Enabled,
 			},
-		},
-		KubernetesNetworkConfig: &svcsdktypes.KubernetesNetworkConfigRequest{
-			ElasticLoadBalancing: &svcsdktypes.ElasticLoadBalancing{
-				Enabled: r.ko.Spec.KubernetesNetworkConfig.ElasticLoadBalancing.Enabled,
-			},
-			IpFamily:        svcsdktypes.IpFamily(*r.ko.Spec.KubernetesNetworkConfig.IPFamily),
+		}
+	}
+
+	// Process network configs
+	if r.ko.Spec.KubernetesNetworkConfig != nil {
+		request := &svcsdktypes.KubernetesNetworkConfigRequest{
 			ServiceIpv4Cidr: r.ko.Spec.KubernetesNetworkConfig.ServiceIPv4CIDR,
-		},
+		}
+
+		if r.ko.Spec.KubernetesNetworkConfig.ElasticLoadBalancing != nil {
+			request.ElasticLoadBalancing = &svcsdktypes.ElasticLoadBalancing{
+				Enabled: r.ko.Spec.KubernetesNetworkConfig.ElasticLoadBalancing.Enabled,
+			}
+		}
+
+		if r.ko.Spec.KubernetesNetworkConfig.IPFamily != nil {
+			request.IpFamily = svcsdktypes.IpFamily(*r.ko.Spec.KubernetesNetworkConfig.IPFamily)
+		}
+
+		input.KubernetesNetworkConfig = request
 	}
 
 	_, err = rm.sdkapi.UpdateClusterConfig(ctx, input)
